@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         RR OC Autopilot
-// @version      0.2.2
+// @version      0.2.3
 // @author       TXM [1712536]
 // @description  Ruthless Reborn OC Autopilot
 // @match        https://www.torn.com/factions.php*
@@ -387,7 +387,7 @@
       const panel = document.querySelector(`div[data-oc-id="${ocId}"]`);
       const titleEl = panel && q(panel, sel("panelTitle"));
       if (!titleEl) continue;
-      for (const kind of ["success", "unknown", "avail"]) {
+      for (const kind of ["success", "ready", "unknown", "avail"]) {
         const node = rec[kind];
         if (node && !panel.contains(node)) titleEl.after(node);
       }
@@ -437,12 +437,38 @@
       if (panelNodes.get(ocId)?.success !== line) return;
       const c = v >= 0.75 ? FACTION_COLOURS.accent : v >= 0.5 ? "#db7b2b" : "#cc3232";
       line.innerHTML = `<span class="rr-pip" style="background:${c}"></span>Success: ${(v * 100).toFixed(2)}%`;
+      panel.dataset.rrSuccess = (v * 100).toFixed(2); // for the success sort
+      if (Toolbar.state.sort.startsWith("success")) safe("sort", applyVisibility);
     };
     const key = scenario + "|" + params.join(",");
     if (Success.cache.has(key)) return show(Success.cache.get(key));
     // keep any value already on the line; only show the placeholder on a fresh line
     if (!/%/.test(line.textContent)) line.innerHTML = `Success: <small>calculating…</small>`;
     Success.get(scenario, params, show);
+  }
+
+  // at-a-glance OC health: how many filled members meet their role threshold
+  function renderReadiness(info, tab) {
+    const { panel, ocId, key, slots } = info;
+    let chip = panel.querySelector(".rr-ready") || panelNodes.get(ocId)?.ready;
+    const drop = () => {
+      chip?.remove();
+      cacheNode(ocId, "ready", null);
+    };
+    const filled = tab === "Planning" ? slots.filter((s) => s.xid && s.chance != null) : [];
+    if (!filled.length) return drop();
+    const shel = isShel();
+    const ready = filled.filter((s) => shel || s.chance >= requiredFor(key, s.roleNorm)).length;
+    const total = filled.length;
+    const colour = ready === total ? FACTION_COLOURS.accent : ready >= total / 2 ? "#db7b2b" : "#cc3232";
+    const html = `<span class="rr-pip" style="background:${colour}"></span>Ready ${ready}/${total}`;
+    if (!chip) chip = el("span", "rr-chip rr-ready");
+    if (chip.dataset.sig !== html) {
+      chip.dataset.sig = html;
+      chip.innerHTML = html;
+    }
+    if (!panel.contains(chip)) (panel.querySelector(".rr-success") || q(panel, sel("panelTitle")))?.after(chip);
+    cacheNode(ocId, "ready", chip);
   }
 
   function renderUnknownBanner(info) {
@@ -568,6 +594,8 @@
         <span class="rr-right">
           <select class="rr-sort">
             <option value="default">Sort: default</option>
+            <option value="success-desc">Success ↓</option>
+            <option value="success-asc">Success ↑</option>
             <option value="level-desc">Level ↓</option>
             <option value="level-asc">Level ↑</option>
             <option value="open-desc">Open slots ↓</option>
@@ -626,6 +654,8 @@
       list.style.flexDirection = "column";
     }
     const metric = {
+      "success-desc": (p) => -(+p.dataset.rrSuccess || 0),
+      "success-asc": (p) => +p.dataset.rrSuccess || 0,
       "level-desc": (p) => -(+p.dataset.rrLevel || 0),
       "level-asc": (p) => +p.dataset.rrLevel || 0,
       "open-desc": (p) => -(+p.dataset.rrOpen || 0),
@@ -654,6 +684,7 @@
       safe("weights", () => renderWeight(s, info.key));
     }
     safe("success", () => renderSuccess(info, tab));
+    safe("readiness", () => renderReadiness(info, tab));
     safe("banner", () => renderUnknownBanner(info));
     safe("availability", () => renderAvailability(info, tab));
     safe("slot-state", () => renderSlotState(info, tab));
