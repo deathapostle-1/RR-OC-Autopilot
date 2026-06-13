@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         RR OC Autopilot
-// @version      0.2.0
+// @version      0.2.1
 // @author       TXM [1712536]
 // @description  Ruthless Reborn OC Autopilot
 // @match        https://www.torn.com/factions.php*
@@ -285,14 +285,6 @@
     border:1px solid rgba(2,158,122,.45);display:block}
   .rr-weight .rr-l{font-size:10px;letter-spacing:1px;color:${FACTION_COLOURS.accent};opacity:.95}
   .rr-weight .rr-v{font-size:16px;font-weight:700;color:#fff}
-
-  /* reframe Torn's role header to match the weight box stacked below it */
-  .rr-role.rr-role{box-sizing:border-box;width:calc(100% - 10px);margin:5px auto !important;
-    border:1px solid rgba(2,158,122,.45) !important;border-radius:4px !important;
-    background:${FACTION_COLOURS.dark} !important}
-  /* role name forced white — readable on the dark role box in both themes
-     (Torn's inherited colour turns near-black in light mode) */
-  #faction-crimes-root [class*="slotHeader___"] [class*="title___"]{color:#fff !important}
   .rr-success{margin:2px 0 4px;font-weight:700;color:${FACTION_COLOURS.accent} !important}
   .rr-success small{font-weight:400;opacity:.7}
   .rr-unknown{margin:4px 0;padding:4px 8px;border-radius:4px;font-size:12px;
@@ -516,7 +508,6 @@
       eligibleCount = 0;
     for (const s of slots) {
       clearSlot(s.wrap);
-      s.header.classList.add("rr-role"); // frame to match the weight box
       if (!onRecruiting && !onPlanning && !onCompleted) continue;
       if (s.chance == null) continue;
       const required = requiredFor(key, s.roleNorm);
