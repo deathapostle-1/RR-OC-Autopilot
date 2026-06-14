@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         RR OC Autopilot
-// @version      0.4.1
+// @version      0.4.2
 // @author       TXM [1712536]
 // @description  Ruthless Reborn OC Autopilot
 // @match        https://www.torn.com/factions.php*
@@ -347,6 +347,10 @@
   .rr-fill-amber{box-shadow:inset 0 0 0 200px rgba(219,123,43,.5),0 0 0 2px #db7b2b,0 0 8px rgba(219,123,43,.45) !important}
   .rr-fill-red{box-shadow:inset 0 0 0 200px rgba(204,50,50,.5),0 0 0 2px #cc3232,0 0 8px rgba(204,50,50,.45) !important}
   .rr-fill-grey{box-shadow:inset 0 0 0 200px rgba(38,38,38,.72),0 0 0 2px rgba(150,150,150,.55) !important}
+  /* TornTools paints whole OC cards green (.tt-oc-highlight), which our green
+     "eligible" fill blends into — give those slots a white ring/glow so they
+     stay distinct. Keeps the green interior so it still reads as eligible. */
+  .tt-oc-highlight .rr-fill-green{box-shadow:inset 0 0 0 200px rgba(2,158,122,.42),0 0 0 2px #fff,0 0 10px rgba(255,255,255,.5) !important}
 
   /* Recruiting open slot you can't join — click-blocking tag */
   .rr-lock{position:absolute;inset:0;z-index:40;display:flex;align-items:flex-end;
