@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         RR OC Autopilot
-// @version      0.4.0
+// @version      0.4.1
 // @author       TXM [1712536]
 // @description  Ruthless Reborn OC Autopilot
 // @match        https://www.torn.com/factions.php*
@@ -179,15 +179,6 @@
   const statusMeta = (state) => STATUS[state] || { verb: state || "Unknown", colour: "#868e96" };
   const isAway = (state) => !!state && state !== "Okay"; // away = show time remaining
 
-  // standard one-way travel times (minutes); private island / WLT jet ≈ ×0.70.
-  // The API gives no live travel countdown for other players, so flight figures
-  // are estimates from these constants (full leg, i.e. just-departed upper bound).
-  const TRAVEL_MIN = {
-    mexico: 26, caymanislands: 35, canada: 41, hawaii: 134, unitedkingdom: 159,
-    argentina: 167, switzerland: 175, japan: 225, china: 242, unitedarabemirates: 271, southafrica: 297,
-  };
-  const PLANE_FACTOR = { private_jet: 0.7, business_jet: 0.7 }; // else standard (×1)
-
   const TornApi = {
     members: null,
     fetchedAt: 0,
@@ -206,7 +197,6 @@
               state: m.status?.state || "",
               until: m.status?.until || null,
               description: m.status?.description || "",
-              plane: m.status?.plane_image_type || null,
             };
           renderAll(true);
         }
@@ -230,39 +220,18 @@
     return ` — back in ${parts.join(" ")}`;
   }
 
-  const fmtMins = (mins) => {
-    mins = Math.max(0, Math.round(mins));
-    const h = Math.floor(mins / 60),
-      m = mins % 60;
-    return h ? (m ? `${h}h ${m}m` : `${h}h`) : `${m}m`;
-  };
-
-  // estimate the flight figure for a traveling/abroad member from the description.
-  // Outbound from Torn → there + full return leg (≈2× one-way); inbound/abroad → one-way.
+  // clean direction text for a traveling/abroad member — no timing (the API gives
+  // no live travel countdown for other players, so any figure would be a guess)
   function travelDetail(st) {
-    const oneway = (country) => {
-      const base = TRAVEL_MIN[norm(country)];
-      // +epsilon so e.g. 175*0.7 (=122.4999… in float) rounds up to 123, not 122
-      return base ? Math.round(base * (PLANE_FACTOR[st.plane] || 1) + 1e-3) : null;
-    };
     const d = st.description || "";
     let m;
-    if ((m = d.match(/from Torn to (.+)/i))) {
-      const t = oneway(m[1]);
-      return t ? `Traveling to ${m[1]} (~${fmtMins(2 * t)} round-trip)` : `Traveling to ${m[1]}`;
-    }
-    if ((m = d.match(/from (.+) to Torn/i))) {
-      const t = oneway(m[1]);
-      return t ? `Returning from ${m[1]} (~${fmtMins(t)} to land)` : `Returning from ${m[1]}`;
-    }
-    if ((m = d.match(/^In (.+)/i))) {
-      const t = oneway(m[1]);
-      return t ? `In ${m[1]} (~${fmtMins(t)} to return)` : `In ${m[1]}`;
-    }
+    if ((m = d.match(/from Torn to (.+)/i))) return `Traveling to ${m[1]}`;
+    if ((m = d.match(/from (.+) to Torn/i))) return `Returning from ${m[1]}`;
+    if ((m = d.match(/^In (.+)/i))) return `In ${m[1]}`;
     return d || "Traveling";
   }
 
-  // tooltip detail: travel gets the estimate; everything else gets the flat until timer
+  // tooltip detail: travel shows direction only; everything else gets the flat until timer
   function statusDetail(st) {
     if (st.state === "Traveling" || st.state === "Abroad") return travelDetail(st);
     return `${statusMeta(st.state).verb}${humanUntil(st.until)}`;
