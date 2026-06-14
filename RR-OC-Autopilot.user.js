@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         RR OC Autopilot
-// @version      0.3.1
+// @version      0.3.2
 // @author       TXM [1712536]
 // @description  Ruthless Reborn OC Autopilot
 // @match        https://www.torn.com/factions.php*
@@ -300,22 +300,25 @@
   .rr-unknown{margin:4px 0;padding:4px 8px;border-radius:4px;font-size:12px;
     background:rgba(240,140,0,.18);border:1px solid rgba(240,140,0,.6);color:#ffb84d}
 
-  /* success chance + member status: one level row of matching pills, each
-     bordered and glowing in its own status colour (set inline via --rr-c) */
-  .rr-info{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:4px 0 6px}
+  /* success chance + member status: matching pills, each bordered and glowing
+     in its own status colour (set inline via --rr-c) */
+  /* the title is a fixed-height flex row — never shrink or wrap the success
+     pill; the long title truncates instead */
+  .rr-info{display:flex;align-items:center;flex:0 0 auto;margin:0 6px;min-width:0}
   .rr-chip,.rr-success{position:relative;display:inline-flex;align-items:center;gap:6px;
     padding:2px 10px;border-radius:10px;font-size:12px;font-weight:700;line-height:1.5;
-    color:#fff !important;background:${FACTION_COLOURS.dark};border:1px solid var(--rr-c,#444);
-    box-shadow:0 0 7px -1px var(--rr-c,transparent);cursor:default}
+    white-space:nowrap;color:#fff !important;background:${FACTION_COLOURS.dark};
+    border:1px solid var(--rr-c,#444);box-shadow:0 0 7px -1px var(--rr-c,transparent);cursor:default}
   .rr-pip{width:8px;height:8px;border-radius:50%;flex:none;
     box-shadow:0 0 0 1px rgba(255,255,255,.28)}
   /* per-slot member status: same pill as the success chip, centred under the member */
   .rr-slot-status{display:flex;justify-content:center;margin:3px 5px 0;max-width:100%}
   .rr-slot-status .rr-chip{max-width:calc(100% - 2px)}
-  .rr-chip .rr-tip{display:none;position:absolute;bottom:calc(100% + 7px);left:0;z-index:99999;
-    background:${FACTION_COLOURS.dark};border:1px solid ${FACTION_COLOURS.accent};color:#eee;font-weight:400;
-    padding:5px 9px;border-radius:5px;white-space:nowrap;box-shadow:0 3px 12px rgba(0,0,0,.6);
-    pointer-events:none}
+  /* centred + width-capped so it never trails off a narrow PDA screen */
+  .rr-chip .rr-tip{display:none;position:absolute;bottom:calc(100% + 7px);left:50%;transform:translateX(-50%);
+    z-index:99999;background:${FACTION_COLOURS.dark};border:1px solid ${FACTION_COLOURS.accent};color:#eee;
+    font-weight:400;padding:5px 9px;border-radius:5px;white-space:normal;width:max-content;
+    max-width:min(240px,80vw);text-align:center;box-shadow:0 3px 12px rgba(0,0,0,.6);pointer-events:none}
   .rr-chip:hover .rr-tip,.rr-chip.rr-open .rr-tip{display:block}
 
   /* threshold fill + matching outline. The infill is a translucent inset
@@ -523,7 +526,7 @@
           const chip = el(
             "span",
             "rr-chip",
-            `<span class="rr-pip" style="background:${m.colour}"></span>${esc(m.verb)}<span class="rr-tip">${esc(st.name)} is ${esc(m.verb)}${esc(humanUntil(st.until))}${st.description ? ` · ${esc(st.description)}` : ""}</span>`
+            `<span class="rr-pip" style="background:${m.colour}"></span>${esc(m.verb)}<span class="rr-tip">${esc(st.name)} is ${esc(m.verb)}${esc(humanUntil(st.until))}</span>`
           );
           chip.style.setProperty("--rr-c", m.colour);
           const holder = el("div", "rr-slot-status");
