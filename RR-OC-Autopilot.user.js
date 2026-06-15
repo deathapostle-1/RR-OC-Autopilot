@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         RR OC Autopilot
-// @version      0.4.5
+// @version      0.5.0
 // @author       TXM [1712536]
 // @description  Ruthless Reborn OC Autopilot
 // @match        https://www.torn.com/factions.php*
@@ -8,6 +8,7 @@
 // @grant        GM_xmlhttpRequest
 // @connect      api.torn.com
 // @connect      tornprobability.com
+// @connect      api.torn.zzcraft.net
 // @license      MIT
 // @updateURL    https://raw.githubusercontent.com/deathapostle-1/rr-oc-autopilot/main/RR-OC-Autopilot.user.js
 // @downloadURL  https://raw.githubusercontent.com/deathapostle-1/rr-oc-autopilot/main/RR-OC-Autopilot.user.js
@@ -16,63 +17,12 @@
 (function () {
   "use strict";
 
-  /* ---------- faction config [switch to API-driven] ---------- */
+  /* ---------- faction config ---------- */
   const PDA_KEY = "###PDA-APIKEY###"; // Torn PDA fills this in automatically
-  const LEVEL_DEFAULT = 68; // fallback CPR
   const AMBER_BAND = 4; // nearly eligible
-
-  const THRESHOLDS = {
-    blastfromthepast: { roles: { picklock1: 65, hacker: 65, engineer: 65, bomber: 65, muscle: 65, picklock2: 60 } },
-    stackingthedeck: { roles: { hacker: 70, imitator: 70, catburglar: 70, driver: 60 } },
-    aceinthehole: { roles: { hacker: 67, driver: 57, muscle1: 67, imitator: 67, muscle2: 67 } },
-    breakthebank: { roles: { robber: 67, muscle1: 67, thief1: 60, muscle2: 67, muscle3: 67, thief2: 67 } },
-    clinicalprecision: { roles: { assassin: 70, catburglar: 70, cleaner: 70, imitator: 70 } },
-    manifestcruelty: { roles: { hacker: 65, interrogator: 65, reviver: 69, catburglar: 65 } },
-    gonefission: { roles: { imitator: 63, pickpocket: 63, bomber: 63, hijacker: 60, engineer: 63 } },
-    cranereaction: { roles: { lookout: 60, sniper: 61, bomber: 60, engineer: 59, muscle1: 60, muscle2: 60 } },
-    windowofopportunity: { roles: { muscle1: 65, muscle2: 65, looter1: 65, looter2: 65, engineer: 65 } },
-    honeytrap: { default: 70 },
-    leavenotrace: { default: 65 },
-    stagefright: { default: 65 },
-    snowblind: { default: 65 },
-    petproject: { default: 65 },
-    cashmeifyoucan: { default: 65 },
-    smokeandwingmirrors: { default: 65 },
-    marketforces: { default: 65 },
-    noreserve: { default: 65 },
-  };
-
-  // how much each role matters to its crime (%)
-  const ROLE_WEIGHTS = {
-    aceinthehole: { imitator: 21.1, muscle1: 18.3, muscle2: 24.7, hacker: 28.3, driver: 7.6 },
-    bestofthelot: { picklock: 20.7, carthief: 19.5, muscle: 43.7, imitator: 16.1 },
-    biddingwar: { robber1: 7.1, driver: 12.5, robber2: 22.9, robber3: 31.7, bomber1: 7.8, bomber2: 18 },
-    blastfromthepast: { picklock1: 10.8, hacker: 12.1, engineer: 24, bomber: 15.6, muscle: 34.6, picklock2: 2.9 },
-    breakthebank: { robber: 12.7, muscle1: 13.5, muscle2: 10.1, thief1: 2.9, muscle3: 31.7, thief2: 29.1 },
-    cashmeifyoucan: { thief1: 54.2, thief2: 28, lookout: 17.8 },
-    clinicalprecision: { imitator: 43.3, catburglar: 18.9, assassin: 16.1, cleaner: 21.7 },
-    counteroffer: { robber: 35.9, looter: 7, hacker: 12.1, picklock: 16.5, engineer: 28.4 },
-    cranereaction: { sniper: 40.7, lookout: 16.6, engineer: 8.3, bomber: 15.9, muscle1: 10.7, muscle2: 7.8 },
-    firstaidandabet: { picklock: 26, decoy: 30.7, pickpocket: 43.2 },
-    gaslighttheway: { imitator1: 9.4, imitator2: 27.5, imitator3: 41.3, looter1: 9.4, looter2: 0, looter3: 12.4 },
-    gonefission: { hijacker: 24.9, engineer: 15.6, pickpocket: 16.5, imitator: 24.9, bomber: 18 },
-    guardianngels: { enforcer: 27.4, hustler: 42.1, engineer: 30.5 },
-    honeytrap: { enforcer: 27, muscle1: 30.9, muscle2: 42.2 },
-    leavenotrace: { techie: 29, negotiator: 34.1, imitator: 36.9 },
-    manifestcruelty: { hacker: 16.3, interrogator: 23.5, reviver: 46.3, catburglar: 13.9 },
-    marketforces: { enforcer: 29.4, negotiator: 27.2, lookout: 16.4, arsonist: 4.5, muscle: 22.5 },
-    mobmentality: { looter1: 34, looter2: 26.5, looter3: 18.4, looter4: 21.2 },
-    noreserve: { carthief: 30.5, techie: 38.4, engineer: 31.1 },
-    petproject: { kidnapper: 30.9, muscle: 32.6, picklock: 36.4 },
-    pluckingthelotuspetal: { robber1: 14, hustler: 14.4, robber2: 23.7, muscle: 47.9 },
-    smokeandwingmirrors: { carthief: 50.9, imitator: 27.1, hustler1: 9, hustler2: 13 },
-    sneakygitgrab: { imitator: 17.5, pickpocket: 50.8, hacker: 14.5, techie: 17.1 },
-    snowblind: { hustler: 48.4, imitator: 34.6, muscle1: 8.5, muscle2: 8.5 },
-    stackingthedeck: { catburglar: 23.4, driver: 3, hacker: 25.4, imitator: 48.2 },
-    stagefright: { enforcer: 15.7, muscle1: 20, muscle2: 2.7, muscle3: 9.2, lookout: 6.2, sniper: 46.3 },
-    thoushaltnotsteal: { thief: 12.4, pickpocket: 37.9, picklock: 49.7 },
-    windowofopportunity: { engineer: 14.6, looter1: 19.5, looter2: 25.8, muscle1: 23.1, muscle2: 17 },
-  };
+  // thresholds + weights come live from our ZZCraft backend, per faction.
+  // Authenticated with each user's own public Torn key (never a shared key).
+  const ZZCRAFT = { factionId: 8062, base: "https://api.torn.zzcraft.net" };
 
   const FACTION_COLOURS = { accent: "#029e7a", dark: "#1f1f1f" };
 
@@ -102,11 +52,10 @@
     }
   };
 
+  // null = no threshold configured for this role → no eligibility colour ("show nothing")
   function requiredFor(key, roleNorm) {
-    const t = THRESHOLDS[key];
-    if (t && t.roles && roleNorm in t.roles) return t.roles[roleNorm];
-    if (t && t.default != null) return t.default;
-    return LEVEL_DEFAULT;
+    const t = Config.thresholds?.[key];
+    return t && roleNorm in t ? t[roleNorm] : null;
   }
 
   const viewerId = () => (document.cookie.match(/(?:^|;\s*)uid=(\d+)/) || [])[1] || null;
@@ -114,20 +63,25 @@
 
   function resolveScenarioKey(title, slug) {
     const t = norm(title);
-    if (THRESHOLDS[t] || ROLE_WEIGHTS[t]) return t;
+    if (Config.has(t)) return t;
     if (slug) {
       if (SLUG_ALIASES[slug]) return SLUG_ALIASES[slug];
       const s = norm(slug.replace(/_\d+$/, ""));
-      if (THRESHOLDS[s] || ROLE_WEIGHTS[s]) return s;
+      if (Config.has(s)) return s;
     }
     return t || null;
   }
 
-  const weightFor = (key, roleNorm) => ROLE_WEIGHTS[key]?.[roleNorm] ?? null;
+  const weightFor = (key, roleNorm) => Config.weights?.[key]?.[roleNorm] ?? null;
 
   /* ---------- Torn API key ---------- */
+  // PDA injects a (non-public) key for the Torn API; the public key the user
+  // enters in the toolbar is what ZZCraft needs (PDA keys aren't public-access)
   function apiKey() {
     if (PDA_KEY && !PDA_KEY.includes("###")) return PDA_KEY;
+    return publicKey();
+  }
+  function publicKey() {
     try {
       return localStorage.getItem("rr_oc_api_key") || "";
     } catch (e) {
@@ -136,7 +90,8 @@
   }
 
   // GM request if available, else plain fetch; returns parsed JSON
-  function requestJson({ method = "GET", url, body }) {
+  function requestJson({ method = "GET", url, body, headers }) {
+    const hdrs = Object.assign(body ? { "Content-Type": "application/json" } : {}, headers || {});
     const gmx =
       (typeof GM_xmlhttpRequest === "function" && GM_xmlhttpRequest) ||
       (typeof GM !== "undefined" && GM && GM.xmlHttpRequest) ||
@@ -146,7 +101,7 @@
         gmx({
           method,
           url,
-          headers: body ? { "Content-Type": "application/json" } : {},
+          headers: hdrs,
           data: body ? JSON.stringify(body) : null,
           timeout: 15000,
           onload: (r) => {
@@ -163,7 +118,7 @@
     }
     return fetch(url, {
       method,
-      headers: body ? { "Content-Type": "application/json" } : {},
+      headers: hdrs,
       body: body ? JSON.stringify(body) : undefined,
     }).then((r) => r.json());
   }
@@ -307,6 +262,72 @@
             this.pump();
           }, 250)
         );
+    },
+  };
+
+  /* ---------- faction thresholds + weights (ZZCraft backend) ----------
+     Live per-faction config. Authenticated with the user's OWN public Torn key
+     (toolbar input) — never a shared/admin key, since this script is public.
+     No data (no key / offline / not loaded) ⇒ show nothing. */
+  const Config = {
+    thresholds: null, // { scenarioKey: { roleKey: minSuccessChance } }
+    weights: null, //    { scenarioKey: { roleKey: weight } }
+    loaded: false,
+    loading: false,
+    at: 0,
+    ttl: 12 * 60 * 60 * 1000,
+    has(key) {
+      return !!(this.thresholds && (this.thresholds[key] || this.weights[key]));
+    },
+    build(arr) {
+      const th = {},
+        wt = {};
+      for (const sc of arr) {
+        const k = norm(sc.name);
+        th[k] = {};
+        wt[k] = {};
+        for (const r of sc.roles || []) {
+          const rk = norm(r.label);
+          if (r.minimumSuccessChance != null) th[k][rk] = r.minimumSuccessChance;
+          if (r.weight != null) wt[k][rk] = r.weight;
+        }
+      }
+      this.thresholds = th;
+      this.weights = wt;
+      this.loaded = true;
+    },
+    load() {
+      // build from cache for an instant first paint, then refresh if stale
+      try {
+        const c = JSON.parse(localStorage.getItem("rr_oc_config") || "null");
+        if (c && Array.isArray(c.data)) {
+          this.build(c.data);
+          this.at = c.at || 0;
+        }
+      } catch (e) {}
+      if (Date.now() - this.at > this.ttl) this.fetch();
+    },
+    fetch() {
+      const key = publicKey();
+      if (!key || this.loading) return;
+      this.loading = true;
+      requestJson({
+        url: `${ZZCRAFT.base}/Factions/${ZZCRAFT.factionId}/OrganizedCrimes/thresholds`,
+        headers: { "X-Api-Key": key },
+      })
+        .then((data) => {
+          if (!Array.isArray(data)) throw new Error("bad config");
+          this.build(data);
+          this.at = Date.now();
+          try {
+            localStorage.setItem("rr_oc_config", JSON.stringify({ data, at: this.at }));
+          } catch (e) {}
+          this.loading = false;
+          renderAll(true);
+        })
+        .catch(() => {
+          this.loading = false;
+        });
     },
   };
 
@@ -516,17 +537,15 @@
 
   function renderUnknownBanner(info) {
     const { panel, ocId, key } = info;
-    const known = !!(THRESHOLDS[key] || ROLE_WEIGHTS[key]);
     let banner = panel.querySelector(".rr-unknown") || panelNodes.get(ocId)?.unknown;
     qa(panel, ".rr-unknown").forEach((b) => b !== banner && b.remove()); // collapse duplicates
-    if (known) {
+    // only flag once config has loaded but this scenario isn't in it (show nothing otherwise)
+    if (!Config.loaded || Config.has(key)) {
       banner?.remove();
       cacheNode(ocId, "unknown", null);
       return;
     }
-    const msg = isShel()
-      ? `⚠ New scenario — ${SHEL.note}.`
-      : `⚠ New scenario — RR default requirement ${LEVEL_DEFAULT} applies until the script is updated.`;
+    const msg = isShel() ? `⚠ ${SHEL.note}.` : `⚠ Not configured in ZZCraft yet.`;
     if (!banner) banner = el("div", "rr-unknown", msg);
     else if (banner.innerHTML !== msg) banner.innerHTML = msg;
     if (!panel.contains(banner)) q(panel, sel("panelTitle"))?.after(banner);
@@ -588,6 +607,7 @@
       }
       if (s.chance == null) continue;
       const required = requiredFor(key, s.roleNorm);
+      if (required == null) continue; // no configured threshold → no eligibility colour
 
       if (onRecruiting && !s.xid) {
         openCount++;
@@ -676,6 +696,8 @@
           syncApiBtn();
           TornApi.fetchedAt = 0;
           TornApi.members = null;
+          Config.at = 0; // re-pull thresholds/weights with the new key
+          Config.fetch();
           renderAll(true);
         });
       });
@@ -776,6 +798,7 @@
       scheduleRender();
     }).observe(root, { childList: true, subtree: true });
     window.addEventListener("hashchange", () => setTimeout(() => safe("render", () => renderAll(true)), 300));
+    safe("config", () => Config.load()); // pull faction thresholds/weights from ZZCraft
     renderAll();
   });
 })();
