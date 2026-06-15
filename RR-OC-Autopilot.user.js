@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         RR OC Autopilot
-// @version      0.7.0
+// @version      0.8.0
 // @author       TXM [1712536]
 // @description  Ruthless Reborn OC Autopilot
 // @match        https://www.torn.com/factions.php*
@@ -37,7 +37,6 @@
     if (html != null) e.innerHTML = html;
     return e;
   };
-  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
   const safe = (label, fn, fallback = undefined) => {
     try {
       return fn();
@@ -109,19 +108,20 @@
     }).then((r) => r.json());
   }
 
-  const STATUS = {
-    Okay: { verb: "Available", colour: "#2f9e44" },
-    Hospital: { verb: "Hospitalized", colour: "#e03131" },
-    Traveling: { verb: "Traveling", colour: "#74c0fc" },
-    Abroad: { verb: "Abroad", colour: "#74c0fc" },
-    Jail: { verb: "Jailed", colour: "#a1632a" },
-    Federal: { verb: "Fedded", colour: "#0a0a0a" },
+  // member status → emoji prefixed to the role name (via CSS ::before, set with a
+  // class so it rides Torn's re-renders without flickering); unmapped states show none
+  const STATUS_CLASS = {
+    Okay: "rr-st-ok",
+    Hospital: "rr-st-hosp",
+    Jail: "rr-st-jail",
+    Federal: "rr-st-fed",
+    Traveling: "rr-st-travel",
+    Abroad: "rr-st-travel",
   };
-  const statusMeta = (state) => STATUS[state] || { verb: state || "Unknown", colour: "#868e96" };
-  const isAway = (state) => !!state && state !== "Okay"; // away = show time remaining
+  const STATUS_CLASSES = Object.values(STATUS_CLASS);
 
   const TornApi = {
-    members: null,
+    members: null, // id -> Torn status state string
     fetchedAt: 0,
     async refresh() {
       const key = apiKey();
@@ -132,13 +132,7 @@
         const r = await requestJson({ url: `https://api.torn.com/v2/faction/members?key=${encodeURIComponent(key)}` });
         if (r && Array.isArray(r.members)) {
           this.members = {};
-          for (const m of r.members)
-            this.members[m.id] = {
-              name: m.name,
-              state: m.status?.state || "",
-              until: m.status?.until || null,
-              description: m.status?.description || "",
-            };
+          for (const m of r.members) this.members[m.id] = m.status?.state || "";
           renderAll(true);
         }
       } catch (e) {
@@ -149,34 +143,6 @@
       return this.members?.[xid] || null;
     },
   };
-
-  function humanUntil(until) {
-    if (!until) return "";
-    let s = Math.max(0, Math.floor(until - Date.now() / 1000));
-    const d = Math.floor(s / 86400);
-    s -= d * 86400;
-    const h = Math.floor(s / 3600);
-    const m = Math.floor((s % 3600) / 60);
-    const parts = d ? [`${d}d`, `${h}h`] : h ? [`${h}h`, `${m}m`] : [`${m}m`];
-    return ` — back in ${parts.join(" ")}`;
-  }
-
-  // clean direction text for a traveling/abroad member — no timing (the API gives
-  // no live travel countdown for other players, so any figure would be a guess)
-  function travelDetail(st) {
-    const d = st.description || "";
-    let m;
-    if ((m = d.match(/from Torn to (.+)/i))) return `Traveling to ${m[1]}`;
-    if ((m = d.match(/from (.+) to Torn/i))) return `Returning from ${m[1]}`;
-    if ((m = d.match(/^In (.+)/i))) return `In ${m[1]}`;
-    return d || "Traveling";
-  }
-
-  // tooltip detail: travel shows direction only; everything else gets the flat until timer
-  function statusDetail(st) {
-    if (st.state === "Traveling" || st.state === "Abroad") return travelDetail(st);
-    return `${statusMeta(st.state).verb}${humanUntil(st.until)}`;
-  }
 
   // success chance calculation
   const Success = {
@@ -334,21 +300,17 @@
   /* the title is a fixed-height flex row — never shrink or wrap the success
      pill; the long title truncates instead */
   .rr-info{display:flex;align-items:center;flex:0 0 auto;margin:0 6px;min-width:0}
-  .rr-chip,.rr-success{position:relative;display:inline-flex;align-items:center;gap:6px;
+  .rr-success{position:relative;display:inline-flex;align-items:center;gap:6px;
     padding:2px 10px;border-radius:10px;font-size:12px;font-weight:700;line-height:1.5;
     white-space:nowrap;color:#fff !important;background:${FACTION_COLOURS.dark};
     border:1px solid var(--rr-c,#444);box-shadow:0 0 7px -1px var(--rr-c,transparent);cursor:default}
-  .rr-pip{width:8px;height:8px;border-radius:50%;flex:none;
-    box-shadow:0 0 0 1px rgba(255,255,255,.28)}
-  /* per-slot member status: same pill as the success chip, centred under the member */
-  .rr-slot-status{display:flex;justify-content:center;margin:3px 5px 0;max-width:100%}
-  .rr-slot-status .rr-chip{max-width:calc(100% - 2px)}
-  /* centred + width-capped so it never trails off a narrow PDA screen */
-  .rr-chip .rr-tip{display:none;position:absolute;bottom:calc(100% + 7px);left:50%;transform:translateX(-50%);
-    z-index:99999;background:${FACTION_COLOURS.dark};border:1px solid ${FACTION_COLOURS.accent};color:#eee;
-    font-weight:400;padding:5px 9px;border-radius:5px;white-space:normal;width:max-content;
-    max-width:min(240px,80vw);text-align:center;box-shadow:0 3px 12px rgba(0,0,0,.6);pointer-events:none}
-  .rr-chip:hover .rr-tip,.rr-chip.rr-open .rr-tip{display:block}
+  .rr-pip{width:8px;height:8px;border-radius:50%;flex:none;box-shadow:0 0 0 1px rgba(255,255,255,.28)}
+  /* member status emoji, prefixed before the role name in the slot header */
+  #faction-crimes-root .rr-st-ok [class*="title___"]::before{content:"🟢 "}
+  #faction-crimes-root .rr-st-hosp [class*="title___"]::before{content:"🔴 "}
+  #faction-crimes-root .rr-st-jail [class*="title___"]::before{content:"🟤 "}
+  #faction-crimes-root .rr-st-fed [class*="title___"]::before{content:"⚫ "}
+  #faction-crimes-root .rr-st-travel [class*="title___"]::before{content:"✈️ "}
 
   /* threshold fill + matching outline. The infill is a translucent inset
      shadow (not a flat background) so it tints the slot without smothering it;
@@ -512,7 +474,6 @@
   function clearSlot(wrap) {
     wrap.querySelector(".rr-lock")?.remove();
     wrap.classList.remove(...FILL);
-    // NB: .rr-slot-status is reused in place (see renderSlotState), not cleared here
   }
   function fillState(chance, required) {
     if (chance >= required) return "green";
@@ -531,31 +492,11 @@
       clearSlot(s.wrap);
       s.header.classList.add("rr-role"); // frame to match the weight box
       if (!onRecruiting && !onPlanning && !onCompleted) continue;
-      // member status pill — reuse in place (like the weight box) so re-renders and
-      // transient parses (a momentarily-missing profile link → null xid) don't flicker it
-      const st = !onCompleted && s.xid && TornApi.members ? TornApi.statusFor(s.xid) : null;
-      const existingStatus = s.wrap.querySelector(".rr-slot-status");
-      if (st) {
-        const m = statusMeta(st.state);
-        const sig = `${s.xid}|${st.state}|${st.until}|${st.name}`; // rebuild only when status changes
-        if (!existingStatus || existingStatus.dataset.sig !== sig) {
-          const holder = el(
-            "div",
-            "rr-slot-status",
-            `<span class="rr-chip" style="--rr-c:${m.colour}"><span class="rr-pip" style="background:${m.colour}"></span>${esc(m.verb)}<span class="rr-tip">${esc(st.name)}: ${esc(statusDetail(st))}</span></span>`
-          );
-          holder.dataset.sig = sig;
-          if (existingStatus) existingStatus.replaceWith(holder);
-          else {
-            const w = s.wrap.querySelector(".rr-weight");
-            if (w) s.wrap.insertBefore(holder, w);
-            else s.wrap.appendChild(holder);
-          }
-        }
-        // unchanged → leave the existing pill (no flicker)
-      } else if (existingStatus && (onCompleted || !TornApi.members)) {
-        existingStatus.remove(); // status definitively shouldn't show here (transient null xid keeps it)
-      }
+      // member status as an emoji before the role name (CSS ::before via a class —
+      // rides Torn's re-renders without flickering). Not shown on Completed.
+      s.header.classList.remove(...STATUS_CLASSES);
+      const state = !onCompleted && s.xid && TornApi.members ? TornApi.statusFor(s.xid) : null;
+      if (state && STATUS_CLASS[state]) s.header.classList.add(STATUS_CLASS[state]);
       if (s.chance == null) continue;
       const required = requiredFor(key, s.roleNorm); // null = not configured in ZZCraft → grey
 
@@ -600,7 +541,7 @@
       if (!list || existing) return;
       const bar = el("div", "rr-toolbar");
       bar.innerHTML = `
-        <span class="rr-brand">RUTHLESS REBORN <small>· OC AUTOPILOT</small></span>
+        <span class="rr-brand">RR <small>· OC AUTOPILOT</small></span>
         <span class="rr-right">
           <select class="rr-sort">
             <option value="default">Sort: default</option>
@@ -736,11 +677,6 @@
     const style = document.createElement("style");
     style.textContent = STYLE;
     document.head.appendChild(style);
-    document.addEventListener("click", (e) => {
-      const chip = e.target.closest?.(".rr-chip");
-      qa(document, ".rr-chip.rr-open").forEach((c) => c !== chip && c.classList.remove("rr-open"));
-      chip?.classList.toggle("rr-open");
-    });
     const root = document.querySelector("#faction-crimes-root") || document.body;
     // re-attach dropped nodes synchronously (no flicker); recompute is debounced
     new MutationObserver(() => {
