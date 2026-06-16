@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         RR OC Autopilot
-// @version      0.10.3
+// @version      0.10.4
 // @author       TXM [1712536]
 // @description  Ruthless Reborn OC Autopilot
 // @match        https://www.torn.com/factions.php*
@@ -534,6 +534,15 @@
   .rr-api.rr-on {
     background:${FACTION_COLOURS.accent};
     color: #fff
+  }
+
+  .rr-octip {
+    margin-top: 5px;
+    padding-top: 5px;
+    border-top: 1px solid rgba(127, 127, 127, .35);
+    font: 700 11px Arial, sans-serif;
+    color: var(--react-dropdown-color);
+    white-space: nowrap
   }`;
 
   /* ============================================================================
@@ -725,6 +734,58 @@
       circle.className = "rr-circle";
       circle.style.background = vis.colour;
     }
+  }
+
+  function humanLeft(secs) {
+    const d = Math.floor(secs / 86400),
+      h = Math.floor((secs % 86400) / 3600),
+      m = Math.floor((secs % 3600) / 60);
+    if (d) return `${d}d ${h}h`;
+    if (h) return `${h}h ${m}m`;
+    if (m) return `${m}m`;
+    return `${secs}s`;
+  }
+
+  function slotWrapOf(elm) {
+    for (let e = elm; e && e !== document.body; e = e.parentElement)
+      if (e.querySelector?.(`:scope > ${sel("slotHeader")}`)) return e;
+    return null;
+  }
+
+  function tooltipNode(node) {
+    if (!(node instanceof Element)) return null;
+    if (
+      node.matches('[class*="tooltip___"]') ||
+      node.hasAttribute("data-floating-ui-focusable")
+    )
+      return node;
+    return node.querySelector?.('[class*="tooltip___"]') || null;
+  }
+
+  function tooltipTrigger(tip) {
+    if (tip.id) {
+      const ref = document.querySelector(`[aria-describedby~="${tip.id}"]`);
+      if (ref) return ref;
+    }
+    return [...document.querySelectorAll(":hover")].pop() || null;
+  }
+
+  function augmentTooltip(tip) {
+    if (tip.dataset.rrOc || !TornApi.members) return;
+    const wrap = slotWrapOf(tooltipTrigger(tip));
+    if (!wrap) return;
+    const xid = wrap
+      .querySelector('a[href*="profiles.php?XID="]')
+      ?.href.match(/XID=(\d+)/)?.[1];
+    const st = xid && TornApi.statusFor(xid);
+    const vis = st && STATUS_VIS[st.state];
+    if (!vis || !vis.timed || !st.until) return;
+    const left = st.until - Math.floor(Date.now() / 1000);
+    if (left <= 0) return;
+    tip.dataset.rrOc = "1";
+    tip.appendChild(
+      el("div", "rr-octip", `${st.state} — out in ${humanLeft(left)}`),
+    );
   }
 
   function renderSlotState(info, tab) {
@@ -936,6 +997,13 @@
       safe("guard", guardPresence);
       scheduleRender();
     }).observe(root, { childList: true, subtree: true });
+    new MutationObserver((muts) => {
+      for (const mut of muts)
+        for (const n of mut.addedNodes) {
+          const tip = tooltipNode(n);
+          if (tip) safe("tooltip", () => augmentTooltip(tip));
+        }
+    }).observe(document.body, { childList: true, subtree: true });
     window.addEventListener("hashchange", () =>
       setTimeout(() => safe("render", () => renderAll(true)), 300),
     );
