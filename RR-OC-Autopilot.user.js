@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         RR OC Autopilot
-// @version      0.10.6
+// @version      0.10.7
 // @author       TXM [1712536]
 // @description  Ruthless Reborn OC Autopilot
 // @match        https://www.torn.com/factions.php*
@@ -401,7 +401,7 @@
     border-radius: 50%;
     z-index: 5;
     pointer-events: none;
-    box-shadow: 0 0 0 1px rgba(255, 255, 255, .28)
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, .28), 0 0 7px -1px var(--rr-c, transparent)
   }
 
   .rr-circle.rr-ring::after {
@@ -731,6 +731,7 @@
       relative(s.wrap);
       s.wrap.appendChild(circle);
     }
+    circle.style.setProperty("--rr-c", vis.colour);
     if (vis.timed && st.until) {
       const frac = Math.max(
         0,
@@ -790,7 +791,7 @@
           }
         : null;
     }
-    if (st.state === "Traveling" || st.state === "Abroad")
+    if (st.state === "Abroad")
       return { colour: vis.colour, text: st.description || st.state };
     return null;
   }
