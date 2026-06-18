@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         RR OC Autopilot
-// @version      0.10.10
+// @version      0.10.11
 // @author       TXM [1712536]
 // @description  Ruthless Reborn OC Autopilot
 // @match        https://www.torn.com/factions.php*
@@ -87,31 +87,25 @@
       (typeof GM_xmlhttpRequest === "function" && GM_xmlhttpRequest) ||
       (typeof GM !== "undefined" && GM && GM.xmlHttpRequest) ||
       null;
-    if (gmx) {
-      return new Promise((resolve, reject) => {
-        gmx({
-          method,
-          url,
-          headers: hdrs,
-          data: body ? JSON.stringify(body) : null,
-          timeout: 15000,
-          onload: (r) => {
-            try {
-              resolve(JSON.parse(r.responseText));
-            } catch (e) {
-              reject(e);
-            }
-          },
-          onerror: reject,
-          ontimeout: () => reject(new Error("timeout")),
-        });
+    if (!gmx) return Promise.reject(new Error("GM_xmlhttpRequest unavailable"));
+    return new Promise((resolve, reject) => {
+      gmx({
+        method,
+        url,
+        headers: hdrs,
+        data: body ? JSON.stringify(body) : null,
+        timeout: 15000,
+        onload: (r) => {
+          try {
+            resolve(JSON.parse(r.responseText));
+          } catch (e) {
+            reject(e);
+          }
+        },
+        onerror: reject,
+        ontimeout: () => reject(new Error("timeout")),
       });
-    }
-    return fetch(url, {
-      method,
-      headers: hdrs,
-      body: body ? JSON.stringify(body) : undefined,
-    }).then((r) => r.json());
+    });
   }
 
   const STATUS_VIS = {
@@ -348,7 +342,7 @@
   .rr-cp > i {
     display: block;
     height: 100%;
-    background: var(--oc-clock-planning-bg, #5bc0de)
+    background:${FACTION_COLOURS.accent}
   }
 
   .rr-role.rr-role {
@@ -644,8 +638,10 @@
   }
 
   function renderCheckpoint(slot) {
+    const ring = slot.wrap.querySelector(sel("planning"));
+    const deg = ring && (ring.getAttribute("style") || "").match(/([\d.]+)deg/);
     let bar = slot.wrap.querySelector(".rr-cp");
-    if (slot.chance == null) {
+    if (!deg) {
       bar?.remove();
       return;
     }
@@ -653,7 +649,8 @@
       bar = el("div", "rr-cp", "<i></i>");
       slot.wrap.appendChild(bar);
     }
-    const pct = Math.max(0, Math.min(100, slot.chance)) + "%";
+    const pct =
+      Math.max(0, Math.min(100, Math.round(parseFloat(deg[1]) / 3.6))) + "%";
     if (bar.firstChild.style.width !== pct) bar.firstChild.style.width = pct;
   }
 
