@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         RR OC Autopilot
-// @version      0.10.13
+// @version      0.10.14
 // @author       TXM [1712536]
 // @description  Ruthless Reborn OC Autopilot
 // @match        https://www.torn.com/factions.php*
@@ -117,10 +117,10 @@
     Abroad: { timed: false },
   };
   const STATUS_ICON = {
-    Okay: `<svg viewBox="0 0 24 24" fill="none" stroke="#2f9e44" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5 11-12"/></svg>`,
-    Hospital: `<svg viewBox="0 0 24 24" fill="#e03131"><path d="M9 2h6v7h7v6h-7v7H9v-7H2V9h7z"/></svg>`,
-    Jail: `<svg viewBox="0 0 24 24" fill="#c98a52"><rect x="3.5" y="2" width="3" height="20" rx="1"/><rect x="10.5" y="2" width="3" height="20" rx="1"/><rect x="17.5" y="2" width="3" height="20" rx="1"/></svg>`,
-    Traveling: `<svg viewBox="0 0 24 24" fill="#74c0fc"><path d="M22 12c0-.7-.6-1.3-1.3-1.3L14 10l-4-7H8l2 7-4 .3L4 8H2.5l1 4-1 4H4l2-2.3 4 .3-2 7h2l4-7 6.7-.7c.7 0 1.3-.6 1.3-1.3z"/></svg>`,
+    Okay: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2f9e44" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5 11-12"/></svg>`,
+    Hospital: `<svg width="14" height="14" viewBox="0 0 24 24" fill="#e03131"><path d="M9 2h6v7h7v6h-7v7H9v-7H2V9h7z"/></svg>`,
+    Jail: `<svg width="14" height="14" viewBox="0 0 24 24" fill="#c98a52"><rect x="3.5" y="2" width="3" height="20" rx="1"/><rect x="10.5" y="2" width="3" height="20" rx="1"/><rect x="17.5" y="2" width="3" height="20" rx="1"/></svg>`,
+    Traveling: `<svg width="14" height="14" viewBox="0 0 24 24" fill="#74c0fc"><path d="M22 12c0-.7-.6-1.3-1.3-1.3L14 10l-4-7H8l2 7-4 .3L4 8H2.5l1 4-1 4H4l2-2.3 4 .3-2 7h2l4-7 6.7-.7c.7 0 1.3-.6 1.3-1.3z"/></svg>`,
   };
   STATUS_ICON.Federal = STATUS_ICON.Jail;
   STATUS_ICON.Abroad = STATUS_ICON.Traveling;
@@ -352,6 +352,10 @@
     background:${FACTION_COLOURS.accent}
   }
 
+  .rr-cp.rr-amber > i {
+    background: #db7b2b
+  }
+
   .rr-cp.rr-fail > i {
     background: #cc3232
   }
@@ -425,8 +429,6 @@
   }
 
   .rr-stat svg {
-    width: 14px;
-    height: 14px;
     display: block
   }
 
@@ -637,10 +639,12 @@
       bar = el("div", "rr-cp", "<i></i>");
       slot.wrap.appendChild(bar);
     }
+    const pctNum = failed
+      ? 100
+      : Math.max(0, Math.min(100, Math.round(parseFloat(deg[1]) / 3.6)));
     bar.classList.toggle("rr-fail", failed);
-    const pct = failed
-      ? "100%"
-      : Math.max(0, Math.min(100, Math.round(parseFloat(deg[1]) / 3.6))) + "%";
+    bar.classList.toggle("rr-amber", !failed && pctNum < 100);
+    const pct = pctNum + "%";
     if (bar.firstChild.style.width !== pct) bar.firstChild.style.width = pct;
   }
 
@@ -813,14 +817,17 @@
     const xid = wrap
       .querySelector('a[href*="profiles.php?XID="]')
       ?.href.match(/XID=(\d+)/)?.[1];
-    const text = xid && statusText(TornApi.statusFor(xid));
+    const st = xid && TornApi.statusFor(xid);
+    const text = st && statusText(st);
     if (!text) return;
     const top = qa(tip, sel("section"))[0];
     if (!top) return;
     const iconDiv = q(top, sel("icon"));
     const textEl = [...top.children].find((c) => c !== iconDiv) || top;
-    // overwrite Torn's planning text with the member status; idempotent (avoids a re-apply loop)
-    if (textEl.textContent !== text) textEl.textContent = text;
+    if (textEl.textContent === text) return; // idempotent — icon set alongside, avoids a loop
+    // overwrite Torn's planning row with our status icon + text
+    textEl.textContent = text;
+    if (iconDiv && STATUS_ICON[st.state]) iconDiv.innerHTML = STATUS_ICON[st.state];
   }
 
   // the tooltip is React-managed and re-renders (e.g. live planning %), reverting a one-shot
