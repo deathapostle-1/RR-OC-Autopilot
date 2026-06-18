@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         RR OC Autopilot
-// @version      0.10.11
+// @version      0.10.12
 // @author       TXM [1712536]
 // @description  Ruthless Reborn OC Autopilot
 // @match        https://www.torn.com/factions.php*
@@ -345,6 +345,10 @@
     background:${FACTION_COLOURS.accent}
   }
 
+  .rr-cp.rr-fail > i {
+    background: #cc3232
+  }
+
   .rr-role.rr-role {
     box-sizing: border-box;
     width: 100% !important;
@@ -545,27 +549,6 @@
   .rr-api.rr-on {
     background:${FACTION_COLOURS.accent};
     color: #fff
-  }
-
-  .rr-octip {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    margin-top: 4px;
-    font: 12px Arial, sans-serif;
-    color: var(--oc-requirement-tooltip-content, var(--react-dropdown-color))
-  }
-
-  .rr-octip-dot {
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    box-shadow: 0 0 0 1px rgba(127, 127, 127, .45)
-  }
-
-  .rr-octip-sym {
-    font-size: 12px;
-    line-height: 1
   }`;
 
   /* ============================================================================
@@ -638,10 +621,11 @@
   }
 
   function renderCheckpoint(slot) {
+    const failed = !!slot.wrap.closest(sel("failed"));
     const ring = slot.wrap.querySelector(sel("planning"));
     const deg = ring && (ring.getAttribute("style") || "").match(/([\d.]+)deg/);
     let bar = slot.wrap.querySelector(".rr-cp");
-    if (!deg) {
+    if (!failed && !deg) {
       bar?.remove();
       return;
     }
@@ -649,8 +633,10 @@
       bar = el("div", "rr-cp", "<i></i>");
       slot.wrap.appendChild(bar);
     }
-    const pct =
-      Math.max(0, Math.min(100, Math.round(parseFloat(deg[1]) / 3.6))) + "%";
+    bar.classList.toggle("rr-fail", failed);
+    const pct = failed
+      ? "100%"
+      : Math.max(0, Math.min(100, Math.round(parseFloat(deg[1]) / 3.6))) + "%";
     if (bar.firstChild.style.width !== pct) bar.firstChild.style.width = pct;
   }
 
@@ -813,6 +799,20 @@
 
   const STATUS_SYMBOL = { Hospital: "🏥", Jail: "🔒", Federal: "🏛️" };
 
+  function statusText(st) {
+    const vis = st && STATUS_VIS[st.state];
+    if (!vis) return null;
+    if (vis.timed && st.until) {
+      const left = st.until - Math.floor(Date.now() / 1000);
+      return left > 0
+        ? `${STATUS_SYMBOL[st.state] || ""} ${st.state} — out in ${humanLeft(left)}`.trim()
+        : null;
+    }
+    if (st.state === "Traveling" || st.state === "Abroad")
+      return st.description || st.state;
+    return null;
+  }
+
   function augmentTooltip(tip) {
     if (tip.dataset.rrOc || !TornApi.members) return;
     const wrap = slotWrapOf(tooltipTrigger(tip));
@@ -820,59 +820,17 @@
     const xid = wrap
       .querySelector('a[href*="profiles.php?XID="]')
       ?.href.match(/XID=(\d+)/)?.[1];
-    const st = xid && TornApi.statusFor(xid);
-    const vis = st && STATUS_VIS[st.state];
-    if (!vis) return;
-
-    // the extra detail and how to attach it to Torn's native status row (rows[0])
-    let match = null,
-      text = "",
-      replace = false;
-    if (vis.timed && st.until) {
-      const left = st.until - Math.floor(Date.now() / 1000);
-      if (left <= 0) return;
-      match = /hospital|jail/i;
-      text = ` — out in ${humanLeft(left)}`;
-    } else if (st.state === "Traveling" && st.description) {
-      match = /travel|returning/i;
-      text = st.description;
-      replace = true;
-    } else if (st.state === "Abroad") {
-      text = st.description || st.state;
-    } else return;
-
+    const text = xid && statusText(TornApi.statusFor(xid));
+    if (!text) return;
+    const top = qa(tip, sel("section"))[0];
+    if (!top) return;
     tip.dataset.rrOc = "1";
-    const rows = qa(tip, sel("section"));
-
-    // prefer Torn's own status row (top of the tooltip, already carries its icon)
-    const native =
-      match && rows[0] && match.test(rows[0].textContent) ? rows[0] : null;
-    if (native) {
-      const iconDiv = q(native, sel("icon"));
-      const textEl = [...native.children].find((c) => c !== iconDiv) || native;
-      textEl.textContent = replace ? text : textEl.textContent + text;
-      return;
-    }
-
-    // fallback: our own row, above the item row
-    const sample = rows[0];
-    const itemRow = rows.find((r) => /\bitem:/i.test(r.textContent));
-    const host = (itemRow || sample)?.parentElement || tip;
-    const row = el("div", sample ? sample.className : "rr-octip");
-    const sampleIcon = sample && q(sample, sel("icon"));
-    const box = el("div", sampleIcon ? sampleIcon.className : "");
-    const symbol = STATUS_SYMBOL[st.state];
-    if (symbol) box.appendChild(el("span", "rr-octip-sym", symbol));
-    else {
-      const dot = el("span", "rr-octip-dot");
-      dot.style.background = vis.colour;
-      box.appendChild(dot);
-    }
-    const txt = document.createElement("span");
-    txt.textContent = vis.timed ? `${st.state}${text}` : text;
-    row.append(box, txt);
-    if (itemRow) host.insertBefore(row, itemRow);
-    else host.appendChild(row);
+    const iconDiv = q(top, sel("icon"));
+    const textEl = [...top.children].find((c) => c !== iconDiv) || top;
+    // member status takes priority over the now-redundant % completion (shown in the bar)
+    textEl.textContent = /%/.test(textEl.textContent)
+      ? text
+      : textEl.textContent + " · " + text;
   }
 
   function renderSlotState(info, tab) {
@@ -1065,6 +1023,22 @@
     safe("torn-api", () => TornApi.refresh());
   }
 
+  function tickLive() {
+    const tab = safe("tab", activeTab, null);
+    if (tab !== "Planning" && tab !== "Recruiting" && tab !== "Completed")
+      return;
+    const onCompleted = tab === "Completed";
+    for (const header of qa(document, `div[data-oc-id] ${sel("slotHeader")}`)) {
+      const profile = q(header.parentElement, 'a[href*="profiles.php?XID="]');
+      const s = {
+        wrap: header.parentElement,
+        xid: profile ? profile.href.match(/XID=(\d+)/)?.[1] : null,
+      };
+      safe("tick-cp", () => renderCheckpoint(s));
+      safe("tick-circle", () => renderStatusCircle(s, onCompleted));
+    }
+  }
+
   let scheduled = false;
   function scheduleRender() {
     if (scheduled) return;
@@ -1096,6 +1070,7 @@
       setTimeout(() => safe("render", () => renderAll(true)), 300),
     );
     safe("config", () => Config.load());
+    setInterval(() => safe("tick", tickLive), 1000);
     renderAll();
   });
 })();
