@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         RR OC Autopilot
-// @version      0.10.14
+// @version      0.11.0
 // @author       TXM [1712536]
 // @description  Ruthless Reborn OC Autopilot
 // @match        https://www.torn.com/factions.php*
@@ -28,7 +28,6 @@
     boom_or_bust: "cranereaction",
   };
 
-  /* ---------- Helpers ---------- */
   const norm = (s) => (s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
   const sel = (prefix) => `[class*="${prefix}___"]`;
   const q = (root, s) => root.querySelector(s);
@@ -117,7 +116,7 @@
     Abroad: { timed: false },
   };
   const STATUS_ICON = {
-    Okay: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2f9e44" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5 11-12"/></svg>`,
+    Okay: `<svg width="14" height="14" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6" fill="#2f9e44"/></svg>`,
     Hospital: `<svg width="14" height="14" viewBox="0 0 24 24" fill="#e03131"><path d="M9 2h6v7h7v6h-7v7H9v-7H2V9h7z"/></svg>`,
     Jail: `<svg width="14" height="14" viewBox="0 0 24 24" fill="#c98a52"><rect x="3.5" y="2" width="3" height="20" rx="1"/><rect x="10.5" y="2" width="3" height="20" rx="1"/><rect x="17.5" y="2" width="3" height="20" rx="1"/></svg>`,
     Traveling: `<svg width="14" height="14" viewBox="0 0 24 24" fill="#74c0fc"><path d="M22 12c0-.7-.6-1.3-1.3-1.3L14 10l-4-7H8l2 7-4 .3L4 8H2.5l1 4-1 4H4l2-2.3 4 .3-2 7h2l4-7 6.7-.7c.7 0 1.3-.6 1.3-1.3z"/></svg>`,
@@ -139,18 +138,54 @@
         });
         if (r && Array.isArray(r.members)) {
           this.members = {};
-          for (const m of r.members)
+          for (const m of r.members) {
             this.members[m.id] = {
               state: m.status?.state || "",
               until: m.status?.until || 0,
               description: m.status?.description || "",
             };
+          }
           renderAll(true);
         }
       } catch (e) {}
     },
     statusFor(xid) {
       return this.members?.[xid] || null;
+    },
+  };
+
+  const FactionCrimes = {
+    byId: null,
+    fetchedAt: 0,
+    async refresh() {
+      const key = apiKey();
+      if (!key) return;
+      if (Date.now() - this.fetchedAt < 5 * 60 * 1000) return;
+      this.fetchedAt = Date.now();
+      try {
+        const r = await requestJson({
+          url: `https://api.torn.com/v2/faction/crimes?key=${encodeURIComponent(key)}`,
+        });
+        if (r && Array.isArray(r.crimes)) {
+          const map = {};
+          for (const c of r.crimes) {
+            const roles = {};
+            for (const s of c.slots || []) {
+              const req = s.item_requirement;
+              if (req) {
+                roles[norm(s.position)] = { id: req.id, available: req.is_available !== false };
+              }
+            }
+            map[c.id] = roles;
+          }
+          this.byId = map;
+          renderAll(true);
+        }
+      } catch (e) {}
+    },
+    missingItem(ocId, roleNorm) {
+      const r = this.byId?.[ocId]?.[roleNorm];
+      return r && !r.available ? r : null;
     },
   };
 
@@ -213,8 +248,9 @@
         body: { scenario: job.scenario, parameters: job.params },
       })
         .then((r) => {
-          if (!r || typeof r.successChance !== "number")
+          if (!r || typeof r.successChance !== "number") {
             throw new Error("bad response");
+          }
           this.cache.set(job.key, r.successChance);
           job.cbs.forEach((cb) => cb(r.successChance));
         })
@@ -254,8 +290,9 @@
         wt[k] = {};
         for (const r of sc.roles || []) {
           const rk = norm(r.label);
-          if (r.minimumSuccessChance != null)
+          if (r.minimumSuccessChance != null) {
             th[k][rk] = r.minimumSuccessChance;
+          }
           if (r.weight != null) wt[k][rk] = r.weight;
         }
       }
@@ -376,6 +413,10 @@
 
   #faction-crimes-root [class*="slotHeader___"] [class*="title___"] {
     color: #fff !important
+  }
+
+  #faction-crimes-root [class*="slotHeader___"].rr-item-missing [class*="title___"] {
+    color: #cc3232 !important
   }
 
   .rr-success small {
@@ -555,6 +596,36 @@
   .rr-api.rr-on {
     background:${FACTION_COLOURS.accent};
     color: #fff
+  }
+
+  .rr-legend {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+    font-size: 11px;
+    color: #b9c1bd
+  }
+
+  .rr-legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px
+  }
+
+  .rr-legend i {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    display: inline-block
+  }
+
+  body:not(.dark-mode) .rr-cp {
+    background: rgba(255, 255, 255, .18)
+  }
+
+  body:not(.dark-mode) .rr-legend i {
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, .25)
   }`;
 
   /* ============================================================================
@@ -699,14 +770,16 @@
             line.style.setProperty("--rr-c", c);
             line.innerHTML = `<span class="rr-pip" style="background:${c}"></span>Success: ${(v * 100).toFixed(2)}%`;
             panel.dataset.rrSuccess = (v * 100).toFixed(2); // for the success sort
-            if (Toolbar.state.sort.startsWith("success"))
+            if (Toolbar.state.sort.startsWith("success")) {
               safe("sort", applyVisibility);
+            }
           };
           const key = scenario + "|" + params.join(",");
           if (Success.cache.has(key)) show(Success.cache.get(key));
           else {
-            if (!/%/.test(line.textContent))
+            if (!/%/.test(line.textContent)) {
               line.innerHTML = `<span class="rr-pip" style="background:#868e96"></span>Success: …`;
+            }
             queue = () => Success.get(scenario, params, show);
           }
         }
@@ -722,8 +795,9 @@
   }
 
   const relative = (e) => {
-    if (getComputedStyle(e).position === "static")
+    if (getComputedStyle(e).position === "static") {
       e.style.position = "relative";
+    }
   };
   const FILL = [
     "rr-fill-green",
@@ -774,8 +848,9 @@
   }
 
   function slotWrapOf(elm) {
-    for (let e = elm; e && e !== document.body; e = e.parentElement)
+    for (let e = elm; e && e !== document.body; e = e.parentElement) {
       if (e.querySelector?.(`:scope > ${sel("slotHeader")}`)) return e;
+    }
     return null;
   }
 
@@ -784,8 +859,9 @@
     if (
       node.matches('[class*="tooltip___"]') ||
       node.hasAttribute("data-floating-ui-focusable")
-    )
+    ) {
       return node;
+    }
     return node.querySelector?.('[class*="tooltip___"]') || null;
   }
 
@@ -805,8 +881,9 @@
       const left = st.until - Math.floor(Date.now() / 1000);
       return left > 0 ? `${st.state} — out in ${humanLeft(left)}` : st.state;
     }
-    if (st.state === "Traveling" || st.state === "Abroad")
+    if (st.state === "Traveling" || st.state === "Abroad") {
       return st.description || st.state;
+    }
     return null;
   }
 
@@ -845,13 +922,17 @@
   }
 
   function renderSlotState(info, tab) {
-    const { key, slots } = info;
+    const { key, slots, ocId } = info;
     const onRecruiting = tab === "Recruiting";
     const onPlanning = tab === "Planning";
     const onCompleted = tab === "Completed";
     for (const s of slots) {
       clearSlot(s.wrap);
       s.header.classList.add("rr-role");
+      s.header.classList.toggle(
+        "rr-item-missing",
+        !!FactionCrimes.missingItem(ocId, s.roleNorm),
+      );
       if (!onRecruiting && !onPlanning && !onCompleted) continue;
       renderStatusIcon(s, onCompleted);
       if (s.chance == null) continue;
@@ -860,18 +941,19 @@
       if (onRecruiting && !s.xid) {
         if (required == null) {
           s.wrap.classList.add("rr-fill-grey");
-        } else if (s.chance >= required) {
-          s.wrap.classList.add("rr-fill-green");
         } else {
-          relative(s.wrap);
-          s.wrap.classList.add("rr-fill-grey");
-          s.wrap.appendChild(
-            el(
-              "div",
-              "rr-lock",
-              `<span>Not Eligible: Requires: ${required}+</span>`,
-            ),
-          );
+          const state = fillState(s.chance, required);
+          s.wrap.classList.add("rr-fill-" + state);
+          if (state === "red") {
+            relative(s.wrap);
+            s.wrap.appendChild(
+              el(
+                "div",
+                "rr-lock",
+                `<span>Not Eligible: Requires: ${required}+</span>`,
+              ),
+            );
+          }
         }
       } else {
         s.wrap.classList.add(
@@ -910,6 +992,12 @@
       const bar = el("div", "rr-toolbar");
       bar.innerHTML = `
         <span class="rr-brand">RR <small>· OC AUTOPILOT</small></span>
+        <span class="rr-legend">
+          <span><i style="background:#029e7a"></i>Eligible</span>
+          <span><i style="background:#db7b2b"></i>Close</span>
+          <span><i style="background:#cc3232"></i>Below</span>
+          <span><i style="background:#6a6a6a"></i>No data</span>
+        </span>
         <span class="rr-right">
           <select class="rr-sort">
             <option value="default">Sort: default</option>
@@ -979,11 +1067,11 @@
       "level-asc": (p) => +p.dataset.rrLevel || 0,
       "open-desc": (p) => -(+p.dataset.rrOpen || 0),
     }[st.sort];
-    if (metric)
+    if (metric) {
       [...panels]
         .sort((a, b) => metric(a) - metric(b))
         .forEach((p, i) => (p.style.order = i));
-    else panels.forEach((p) => (p.style.order = ""));
+    } else panels.forEach((p) => (p.style.order = ""));
   }
 
   /* ============================================================================
@@ -996,6 +1084,7 @@
       info.key,
       tab,
       TornApi.fetchedAt,
+      FactionCrimes.fetchedAt,
       info.slots.map((s) => `${s.roleNorm}:${s.chance}:${s.xid}`).join("|"),
     ].join("§");
     if (panel.dataset.rrFp === fp) return;
@@ -1020,24 +1109,29 @@
      ============================================================================ */
   function renderAll(force = false) {
     const tab = safe("tab", activeTab, null);
-    if (force)
+    if (force) {
       qa(document, "div[data-oc-id]").forEach((p) => delete p.dataset.rrFp);
+    }
     const live = new Set(
       qa(document, "div[data-oc-id]").map((p) => p.getAttribute("data-oc-id")),
     );
-    for (const [ocId, rec] of panelNodes)
+    for (const [ocId, rec] of panelNodes) {
       if (!live.has(ocId) && !rec.info?.isConnected) panelNodes.delete(ocId);
-    for (const p of qa(document, "div[data-oc-id]"))
+    }
+    for (const p of qa(document, "div[data-oc-id]")) {
       safe("panel", () => processPanel(p, tab));
+    }
     safe("toolbar", () => Toolbar.ensure(tab));
     safe("visibility", applyVisibility);
     safe("torn-api", () => TornApi.refresh());
+    safe("faction-crimes", () => FactionCrimes.refresh());
   }
 
   function tickLive() {
     const tab = safe("tab", activeTab, null);
-    if (tab !== "Planning" && tab !== "Recruiting" && tab !== "Completed")
+    if (tab !== "Planning" && tab !== "Recruiting" && tab !== "Completed") {
       return;
+    }
     const onCompleted = tab === "Completed";
     for (const header of qa(document, `div[data-oc-id] ${sel("slotHeader")}`)) {
       const profile = q(header.parentElement, 'a[href*="profiles.php?XID="]');
@@ -1071,11 +1165,12 @@
       scheduleRender();
     }).observe(root, { childList: true, subtree: true });
     new MutationObserver((muts) => {
-      for (const mut of muts)
+      for (const mut of muts) {
         for (const n of mut.addedNodes) {
           const tip = tooltipNode(n);
           if (tip) safe("tooltip", () => augmentTooltip(tip));
         }
+      }
     }).observe(document.body, { childList: true, subtree: true });
     window.addEventListener("hashchange", () =>
       setTimeout(() => safe("render", () => renderAll(true)), 300),
