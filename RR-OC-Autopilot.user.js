@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         RR OC Autopilot
-// @version      1.0.0
+// @version      1.1.0
 // @author       TXM [1712536]
 // @description  Ruthless Reborn OC Autopilot
 // @match        https://www.torn.com/factions.php*
@@ -46,6 +46,14 @@
       return fallback;
     }
   };
+  const ME = safe(
+    "me",
+    () => {
+      const raw = document.getElementById("torn-user")?.value;
+      return raw ? JSON.parse(raw).id || null : null;
+    },
+    null,
+  );
 
   function requiredFor(key, roleNorm) {
     const t = Config.thresholds?.[key];
@@ -512,6 +520,34 @@
     outline-offset: 2px
   }
 
+  div[data-oc-id][data-rr-self="1"] {
+    outline: 2px solid #4aa3ff;
+    outline-offset: -2px;
+    border-radius: 6px;
+    box-shadow: 0 0 11px rgba(74, 163, 255, .4)
+  }
+
+  div[data-oc-id][data-rr-ready="1"] {
+    position: relative;
+    box-shadow: 0 0 0 2px #2fbf71, 0 0 13px rgba(47, 191, 113, .55) !important
+  }
+
+  div[data-oc-id][data-rr-ready="1"]::after {
+    content: "READY";
+    position: absolute;
+    top: 6px;
+    left: 8px;
+    z-index: 30;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: #2fbf71;
+    color: #08130d;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .5px;
+    pointer-events: none
+  }
+
   .rr-lock {
     position: absolute;
     inset: 0;
@@ -766,6 +802,21 @@
     bar.classList.toggle("rr-amber", !failed && pctNum < 100);
     const pct = pctNum + "%";
     if (bar.firstChild.style.width !== pct) bar.firstChild.style.width = pct;
+  }
+
+  function slotPlanned(wrap) {
+    const ring = wrap.querySelector(sel("planning"));
+    const m = ring && (ring.getAttribute("style") || "").match(/([\d.]+)deg/);
+    return m ? parseFloat(m[1]) >= 360 : false;
+  }
+  function panelReady(panel) {
+    const wraps = qa(panel, sel("slotHeader")).map((h) => h.parentElement);
+    return (
+      wraps.length > 0 &&
+      wraps.every(
+        (w) => q(w, 'a[href*="profiles.php?XID="]') && slotPlanned(w),
+      )
+    );
   }
 
   function renderInfoRow(info, tab) {
@@ -1164,6 +1215,10 @@
         const req = requiredFor(info.key, s.roleNorm);
         return req == null || s.chance >= req - AMBER_BAND;
       }).length;
+      if (ME && info.slots.some((s) => s.xid === ME)) panel.dataset.rrSelf = "1";
+      else delete panel.dataset.rrSelf;
+      if (tab === "Planning" && panelReady(panel)) panel.dataset.rrReady = "1";
+      else delete panel.dataset.rrReady;
     });
   }
 
@@ -1204,6 +1259,14 @@
       };
       safe("tick-cp", () => renderCheckpoint(s));
       safe("tick-icon", () => renderStatusIcon(s, onCompleted));
+    }
+    if (tab === "Planning") {
+      for (const panel of qa(document, "div[data-oc-id]")) {
+        safe("tick-ready", () => {
+          if (panelReady(panel)) panel.dataset.rrReady = "1";
+          else delete panel.dataset.rrReady;
+        });
+      }
     }
   }
 
