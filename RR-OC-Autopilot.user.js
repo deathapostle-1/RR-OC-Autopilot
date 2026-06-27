@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         RR OC Autopilot
-// @version      0.11.3
+// @version      1.0.0
 // @author       TXM [1712536]
 // @description  Ruthless Reborn OC Autopilot
 // @match        https://www.torn.com/factions.php*
@@ -739,14 +739,17 @@
     const ocId = slot.wrap
       .closest("div[data-oc-id]")
       ?.getAttribute("data-oc-id");
+    const ring = slot.wrap.querySelector(sel("planning"));
+    const deg = ring && (ring.getAttribute("style") || "").match(/([\d.]+)deg/);
     const icon = slot.wrap.querySelector(sel("slotIcon"));
     const iconHtml = (icon && icon.innerHTML) || "";
     const failed =
-      (!!slot.xid && /#ff794c/i.test(iconHtml) && /3\.729/.test(iconHtml)) ||
+      (!!slot.xid &&
+        !ring &&
+        /#ff794c/i.test(iconHtml) &&
+        /3\.729/.test(iconHtml)) ||
       FactionCrimes.failed(ocId) ||
       !!slot.wrap.closest(sel("failed"));
-    const ring = slot.wrap.querySelector(sel("planning"));
-    const deg = ring && (ring.getAttribute("style") || "").match(/([\d.]+)deg/);
     let bar = slot.wrap.querySelector(".rr-cp");
     if (!failed && !deg) {
       bar?.remove();
